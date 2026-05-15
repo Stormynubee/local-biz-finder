@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, MapPin, Globe, Phone, Building2, Download, Filter, ExternalLink, Loader2, CheckCircle2, Navigation, Zap } from "lucide-react";
+import { Search, MapPin, Globe, Phone, Building2, Download, Filter, ExternalLink, Loader2, CheckCircle2, Navigation, Zap, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Variants } from "framer-motion";
 import type { BusinessData } from "@/lib/api";
@@ -27,6 +27,10 @@ function getSavedContactedIds() {
 }
 
 function getErrorMessage(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "The search took too long. Try Google Maps, a more specific business type, or a nearby larger city.";
+  }
+
   return error instanceof Error ? error.message : "An error occurred while fetching data.";
 }
 
@@ -39,9 +43,12 @@ type BusinessesResponse = {
   error?: string;
 };
 
+type DataSource = "google" | "osm";
+
 export default function Home() {
   const [location, setLocation] = useState("");
   const [businessType, setBusinessType] = useState("all");
+  const [dataSource, setDataSource] = useState<DataSource>("google");
   const [isLoading, setIsLoading] = useState(false);
   const [businesses, setBusinesses] = useState<BusinessData[]>([]);
   const [filter, setFilter] = useState<"all" | "no-website" | "has-website">("all");
@@ -60,11 +67,15 @@ export default function Home() {
     setFilter("all");
 
     try {
-      const response = await fetch("/api/businesses", {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), dataSource === "google" ? 55000 : 32000);
+      const response = await fetch(dataSource === "google" ? "/api/scrape" : "/api/businesses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ location: trimmedLocation, businessType }),
+        signal: controller.signal,
       });
+      window.clearTimeout(timeout);
       const data = (await response.json()) as BusinessesResponse;
 
       if (!response.ok) {
@@ -112,7 +123,7 @@ export default function Home() {
           escapeCsvCell(b.phone),
           escapeCsvCell(b.website),
           escapeCsvCell(contactedIds.has(b.id) ? "Contacted" : "Pending"),
-          escapeCsvCell("OpenStreetMap")
+          escapeCsvCell(b.source === "google" ? "Google Maps" : "OpenStreetMap")
         ].join(",")
       )
     ].join("\n");
@@ -178,11 +189,30 @@ export default function Home() {
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
           {/* Data Source Selector */}
-          <div className="md:col-span-2 flex justify-center mb-2">
+          <div className="md:col-span-2 flex justify-center mb-2 overflow-x-auto pb-2 -mx-2 px-2 md:overflow-visible md:pb-0 md:mx-0 md:px-0">
             <div className="bg-[rgba(0,0,0,0.3)] p-1.5 rounded-2xl border border-border inline-flex flex-nowrap whitespace-nowrap">
-              <span className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium bg-primary text-white shadow-lg">
-                <Globe className="w-4 h-4" /> OpenStreetMap <span className="hidden sm:inline">(Vercel-ready)</span>
-              </span>
+              <button
+                type="button"
+                onClick={() => setDataSource("google")}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  dataSource === "google"
+                    ? "bg-accent text-white shadow-lg scale-[1.02]"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Bot className="w-4 h-4" /> Google Maps <span className="hidden sm:inline">(Deep Catch)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDataSource("osm")}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  dataSource === "osm"
+                    ? "bg-primary text-white shadow-lg scale-[1.02]"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Globe className="w-4 h-4" /> OpenStreetMap <span className="hidden sm:inline">(Fast)</span>
+              </button>
             </div>
           </div>
 
@@ -221,10 +251,12 @@ export default function Home() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-4 text-white rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]"
+            className={`w-full py-4 text-white rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${
+              dataSource === "google" ? "bg-accent hover:bg-accent-hover hover:shadow-accent/25" : "bg-primary hover:bg-primary-hover hover:shadow-primary/25"
+            } disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]`}
           >
             {isLoading ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Catching Info...</>
+              <><Loader2 className="w-5 h-5 animate-spin" /> {dataSource === "google" ? "Scraping Google Maps..." : "Catching Info..."}</>
             ) : (
               <><Search className="w-5 h-5" /> Catch Businesses</>
             )}
@@ -369,7 +401,7 @@ export default function Home() {
 
                     <div className="mt-6 pt-5 border-t border-border/50 flex items-center justify-between gap-3">
                       <a
-                        href={biz.lat && biz.lon ? `https://www.google.com/maps/search/?api=1&query=${biz.lat},${biz.lon}` : biz.website}
+                        href={biz.mapsUrl || (biz.lat && biz.lon ? `https://www.google.com/maps/search/?api=1&query=${biz.lat},${biz.lon}` : biz.website)}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-white transition-all duration-300 py-2 px-4 rounded-xl hover:bg-[rgba(255,255,255,0.05)]"
@@ -417,6 +449,12 @@ export default function Home() {
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div className="bg-[rgba(255,255,255,0.02)] border border-border/50 rounded-3xl p-6 h-[260px] flex flex-col items-center justify-center relative overflow-hidden" key={i}>
               <div className="absolute inset-0 animate-shimmer" />
+              {dataSource === "google" && (
+                <div className="z-10 text-accent flex flex-col items-center animate-pulse">
+                  <Bot className="w-12 h-12 mb-3 opacity-80" />
+                  <span className="text-sm font-bold tracking-wide">Scraping Google Maps...</span>
+                </div>
+              )}
             </div>
           ))}
         </div>

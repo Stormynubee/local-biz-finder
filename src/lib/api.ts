@@ -8,6 +8,8 @@ export interface BusinessData {
   phone?: string;
   website?: string;
   hasWebsite: boolean;
+  source?: "osm" | "google";
+  mapsUrl?: string;
 }
 
 type OsmElement = {
@@ -35,6 +37,7 @@ export async function searchBusinesses(location: string, businessType: string): 
   const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
   
   const geoResponse = await fetch(geocodeUrl, {
+    signal: AbortSignal.timeout(12000),
     headers: {
       'User-Agent': 'LocalBizFinderApp/1.0'
     }
@@ -53,7 +56,7 @@ export async function searchBusinesses(location: string, businessType: string): 
   const lat = parseFloat(geoData[0].lat);
   const lon = parseFloat(geoData[0].lon);
   
-  const radius = 8000;
+  const radius = businessType === 'all' || !businessType ? 5000 : 8000;
 
   // 2. Query Overpass API
   let queryTypes = '';
@@ -83,7 +86,7 @@ export async function searchBusinesses(location: string, businessType: string): 
   }
 
   const overpassQuery = `
-    [out:json][timeout:25];
+    [out:json][timeout:18];
     (
       ${queryTypes}
     );
@@ -93,6 +96,7 @@ export async function searchBusinesses(location: string, businessType: string): 
   const overpassUrl = 'https://overpass-api.de/api/interpreter';
   const overpassResponse = await fetch(overpassUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(22000),
     body: 'data=' + encodeURIComponent(overpassQuery),
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -159,7 +163,9 @@ export async function searchBusinesses(location: string, businessType: string): 
       address: addressStr || 'Address not listed',
       phone,
       website: website?.startsWith('http') ? website : (website ? `https://${website}` : undefined),
-      hasWebsite: !!website
+      hasWebsite: !!website,
+      source: 'osm',
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${elLat},${elLon}`
     });
   }
 
