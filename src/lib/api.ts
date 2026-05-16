@@ -37,10 +37,7 @@ export async function searchBusinesses(location: string, businessType: string): 
   const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
   
   const geoResponse = await fetch(geocodeUrl, {
-    signal: AbortSignal.timeout(12000),
-    headers: {
-      'User-Agent': 'LocalBizFinderApp/1.0'
-    }
+    signal: AbortSignal.timeout(12000)
   });
   
   if (!geoResponse.ok) {
@@ -99,11 +96,10 @@ export async function searchBusinesses(location: string, businessType: string): 
   const overpassUrl = 'https://overpass-api.de/api/interpreter';
   const overpassResponse = await fetch(overpassUrl, {
     method: 'POST',
-    signal: AbortSignal.timeout(40000), // increased timeout to 40 seconds
+    signal: AbortSignal.timeout(40000),
     body: 'data=' + encodeURIComponent(overpassQuery),
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'BusinessCatch/1.0 (Vercel deployment)'
+      'Content-Type': 'application/x-www-form-urlencoded'
     }
   });
 
