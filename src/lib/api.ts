@@ -56,19 +56,22 @@ export async function searchBusinesses(location: string, businessType: string): 
   const lat = parseFloat(geoData[0].lat);
   const lon = parseFloat(geoData[0].lon);
   
-  const radius = businessType === 'all' || !businessType ? 5000 : 8000;
+  // Decrease radius to 3000m (3km) to prevent API overload and timeouts
+  const radius = businessType === 'all' || !businessType ? 3000 : 5000;
 
-  // 2. Query Overpass API
+  // 2. Query Overpass API (using node instead of nwr for performance when searching all)
   let queryTypes = '';
   
   if (businessType === 'all' || !businessType) {
     queryTypes = `
-      nwr["shop"]["name"](around:${radius},${lat},${lon});
-      nwr["amenity"]["name"](around:${radius},${lat},${lon});
-      nwr["office"]["name"](around:${radius},${lat},${lon});
-      nwr["craft"]["name"](around:${radius},${lat},${lon});
-      nwr["healthcare"]["name"](around:${radius},${lat},${lon});
-      nwr["tourism"]["name"](around:${radius},${lat},${lon});
+      node["shop"]["name"](around:${radius},${lat},${lon});
+      node["amenity"]["name"](around:${radius},${lat},${lon});
+      node["office"]["name"](around:${radius},${lat},${lon});
+      node["craft"]["name"](around:${radius},${lat},${lon});
+      node["healthcare"]["name"](around:${radius},${lat},${lon});
+      node["tourism"]["name"](around:${radius},${lat},${lon});
+      way["shop"]["name"](around:${radius},${lat},${lon});
+      way["amenity"]["name"](around:${radius},${lat},${lon});
     `;
   } else if (businessType === 'food') {
     queryTypes = `nwr["amenity"~"restaurant|cafe|fast_food|bar|pub|food_court|ice_cream"](around:${radius},${lat},${lon});`;
@@ -86,17 +89,17 @@ export async function searchBusinesses(location: string, businessType: string): 
   }
 
   const overpassQuery = `
-    [out:json][timeout:18];
+    [out:json][timeout:35];
     (
       ${queryTypes}
     );
-    out center 120;
+    out center;
   `;
 
   const overpassUrl = 'https://overpass-api.de/api/interpreter';
   const overpassResponse = await fetch(overpassUrl, {
     method: 'POST',
-    signal: AbortSignal.timeout(22000),
+    signal: AbortSignal.timeout(40000), // increased timeout to 40 seconds
     body: 'data=' + encodeURIComponent(overpassQuery),
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
