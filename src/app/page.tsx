@@ -373,16 +373,17 @@ export default function Home() {
               >
                 {/* Controls */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-5 px-2">
-                  <div className="flex items-center gap-1 p-1.5 bg-[rgba(0,0,0,0.3)] border border-white/5 rounded-2xl overflow-x-auto w-full sm:w-auto backdrop-blur-sm">
+                  <div className="flex items-center gap-1 p-1.5 bg-[rgba(0,0,0,0.4)] border border-white/10 rounded-2xl overflow-x-auto w-full sm:w-auto shadow-inner scrollbar-hide">
                     <Filter className="w-4 h-4 text-primary ml-3 shrink-0" />
                     {(["all", "no-website", "has-website"] as const).map((f) => (
                       <button
+                        type="button"
                         key={f}
                         onClick={() => setFilter(f)}
                         className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap ml-1 ${
                           filter === f 
-                            ? "bg-white/10 text-white shadow-sm" 
-                            : "text-gray-500 hover:text-white hover:bg-white/5"
+                            ? "bg-primary text-white shadow-[0_0_15px_rgba(var(--primary-rgb),0.5)] scale-[1.02]" 
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
                         }`}
                       >
                         {f === "all" ? "All Results" : f === "no-website" ? "No Website" : "Has Website"}
@@ -448,8 +449,8 @@ export default function Home() {
                           >
                             <motion.div
                               initial={false}
-                              animate={{ scale: isContacted ? 1.2 : 1, rotate: isContacted ? [0, -15, 15, 0] : 0 }}
-                              transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                              animate={{ scale: isContacted ? 1.2 : 1, rotate: isContacted ? 360 : 0 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 15 }}
                             >
                               <CheckCircle2 className={`w-6 h-6 ${isContacted ? 'fill-green-500/20' : ''}`} />
                             </motion.div>
