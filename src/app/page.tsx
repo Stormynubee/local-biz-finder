@@ -68,8 +68,24 @@ export default function Home() {
 
     try {
       if (dataSource === "osm") {
-        const data = await searchBusinesses(trimmedLocation, businessType);
-        setBusinesses(data);
+        const response = await fetch("/api/businesses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ location: trimmedLocation, businessType })
+        });
+        
+        if (!response.ok) {
+          const text = await response.text();
+          try {
+             const data = JSON.parse(text);
+             throw new Error(data.error || "Failed to search OpenStreetMap.");
+          } catch {
+             throw new Error(`Server Error (${response.status}): Vercel encountered an issue.`);
+          }
+        }
+        
+        const data = await response.json();
+        setBusinesses(data.businesses ?? []);
       } else {
         const response = await fetch("/api/scrape", {
           method: "POST",
