@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Search, MapPin, Globe, Phone, Building2, Download, Filter, ExternalLink, Loader2, CheckCircle2, Navigation, Zap, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Variants } from "framer-motion";
-import type { BusinessData } from "@/lib/api";
+import { searchBusinesses, type BusinessData } from "@/lib/api";
 
 const contactedStorageKey = "contactedBusinesses";
 
@@ -26,35 +26,27 @@ function getSavedContactedIds() {
   }
 }
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return "The search took too long. Try Google Maps, a more specific business type, or a nearby larger city.";
-  }
-
-  return error instanceof Error ? error.message : "An error occurred while fetching data.";
-}
-
 function escapeCsvCell(value: string | number | boolean | undefined) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
-
-type BusinessesResponse = {
-  businesses?: BusinessData[];
-  error?: string;
-};
 
 type DataSource = "google" | "osm";
 
 export default function Home() {
   const [location, setLocation] = useState("");
   const [businessType, setBusinessType] = useState("all");
-  const [dataSource, setDataSource] = useState<DataSource>("google");
+  const [dataSource, setDataSource] = useState<DataSource>("osm");
   const [isLoading, setIsLoading] = useState(false);
   const [businesses, setBusinesses] = useState<BusinessData[]>([]);
   const [filter, setFilter] = useState<"all" | "no-website" | "has-website">("all");
   const [error, setError] = useState<string | null>(null);
 
-  const [contactedIds, setContactedIds] = useState<Set<number>>(getSavedContactedIds);
+  const [contactedIds, setContactedIds] = useState<Set<number>>(new Set());
+
+  // Use useEffect for hydration safety
+  useEffect(() => {
+    setContactedIds(getSavedContactedIds());
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,24 +59,34 @@ export default function Home() {
     setFilter("all");
 
     try {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), dataSource === "google" ? 55000 : 32000);
-      const response = await fetch(dataSource === "google" ? "/api/scrape" : "/api/businesses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: trimmedLocation, businessType }),
-        signal: controller.signal,
-      });
-      window.clearTimeout(timeout);
-      const data = (await response.json()) as BusinessesResponse;
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to catch businesses.");
+      if (dataSource === "osm") {
+        // Run client-side to avoid Vercel 10s Serverless timeouts!
+        const data = await searchBusinesses(trimmedLocation, businessType);
+        setBusinesses(data);
+      } else {
+        // Google Maps Scrape via API (will likely timeout on Vercel, works locally)
+        const response = await fetch("/api/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ location: trimmedLocation, businessType })
+        });
+        
+        if (!response.ok) {
+          const text = await response.text();
+          try {
+             const data = JSON.parse(text);
+             throw new Error(data.error || "Failed to run the Google Maps Bot");
+          } catch {
+             throw new Error(`Server Error (${response.status}): Vercel likely timed out. Please use OpenStreetMap instead.`);
+          }
+        }
+        
+        const data = await response.json();
+        setBusinesses(data.businesses ?? []);
       }
-
-      setBusinesses(data.businesses ?? []);
-    } catch (err: unknown) {
-      setError(getErrorMessage(err));
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "An error occurred while fetching data.");
     } finally {
       setIsLoading(false);
     }
@@ -193,17 +195,6 @@ export default function Home() {
             <div className="bg-[rgba(0,0,0,0.3)] p-1.5 rounded-2xl border border-border inline-flex flex-nowrap whitespace-nowrap">
               <button
                 type="button"
-                onClick={() => setDataSource("google")}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
-                  dataSource === "google"
-                    ? "bg-accent text-white shadow-lg scale-[1.02]"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <Bot className="w-4 h-4" /> Google Maps <span className="hidden sm:inline">(Deep Catch)</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setDataSource("osm")}
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                   dataSource === "osm"
@@ -211,7 +202,18 @@ export default function Home() {
                     : "text-gray-400 hover:text-white"
                 }`}
               >
-                <Globe className="w-4 h-4" /> OpenStreetMap <span className="hidden sm:inline">(Fast)</span>
+                <Globe className="w-4 h-4" /> OpenStreetMap <span className="hidden sm:inline">(Vercel-Ready)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDataSource("google")}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                  dataSource === "google"
+                    ? "bg-accent text-white shadow-lg scale-[1.02]"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Bot className="w-4 h-4" /> Google Maps Bot <span className="hidden sm:inline">(Local Only)</span>
               </button>
             </div>
           </div>
@@ -243,6 +245,7 @@ export default function Home() {
                 <option value="shop" className="bg-background text-white">Shops & Retail</option>
                 <option value="food" className="bg-background text-white">Restaurants & Cafes</option>
                 <option value="health" className="bg-background text-white">Healthcare (Clinics, etc)</option>
+                <option value="office" className="bg-background text-white">Offices & Services</option>
               </select>
             </div>
           </div>
@@ -256,7 +259,7 @@ export default function Home() {
             } disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]`}
           >
             {isLoading ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> {dataSource === "google" ? "Scraping Google Maps..." : "Catching Info..."}</>
+              <><Loader2 className="w-5 h-5 animate-spin" /> Catching Info...</>
             ) : (
               <><Search className="w-5 h-5" /> Catch Businesses</>
             )}
@@ -449,12 +452,6 @@ export default function Home() {
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div className="bg-[rgba(255,255,255,0.02)] border border-border/50 rounded-3xl p-6 h-[260px] flex flex-col items-center justify-center relative overflow-hidden" key={i}>
               <div className="absolute inset-0 animate-shimmer" />
-              {dataSource === "google" && (
-                <div className="z-10 text-accent flex flex-col items-center animate-pulse">
-                  <Bot className="w-12 h-12 mb-3 opacity-80" />
-                  <span className="text-sm font-bold tracking-wide">Scraping Google Maps...</span>
-                </div>
-              )}
             </div>
           ))}
         </div>
