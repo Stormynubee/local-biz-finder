@@ -6,9 +6,11 @@
   
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
+  --primary-rgb: 99, 102, 241;
   
   --color-accent: #10b981;
   --color-accent-hover: #059669;
+  --accent-rgb: 16, 185, 129;
   
   --color-surface: rgba(255, 255, 255, 0.03);
   --color-surface-hover: rgba(255, 255, 255, 0.05);
@@ -49,6 +51,15 @@ body {
   background: var(--color-border-hover); 
 }
 
+/* Hide scrollbar for specific elements */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 /* Shimmer Loading Animation */
 @keyframes shimmer {
   0% {
@@ -63,4 +74,20 @@ body {
   animation: shimmer 2s infinite linear;
   background: linear-gradient(to right, var(--color-surface) 4%, var(--color-surface-hover) 25%, var(--color-surface) 36%);
   background-size: 1000px 100%;
+}
+
+/* Slow Pulse Animation */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
